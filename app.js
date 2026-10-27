@@ -181,7 +181,7 @@ function initSearch() {
     if (!q) { renderProducts('All'); return; }
     const filtered = state.products.filter(p => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q));
     renderProductsFiltered(filtered);
-    sel('catHeaderText').textContent = 'Search: ' + esc(q));
+    sel('catHeaderText').textContent = 'Search: ' + esc(q);
   });
 }
 function renderProductsFiltered(list) {
