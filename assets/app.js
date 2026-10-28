@@ -1155,6 +1155,7 @@ function startDeposit() {
   API.call('deposit_rupantor', { amount: amt }).then(j => {
     busy(btn, false);
     if (!j.ok) { err.textContent = j.msg || 'Could not create payment link'; err.style.display = 'block'; return; }
+    state.depositCode = j.code;
     // redirect to RupantorPay payment page
     window.location.href = j.payment_url;
   }).catch(() => {
@@ -1163,6 +1164,72 @@ function startDeposit() {
     err.style.display = 'block';
   });
 }
+function checkPendingPayment() {
+  if (!state.depositCode) { toast('No pending deposit found', 'err'); return; }
+  const btn = document.querySelector('#balanceOverlay .btn-check');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+  checkPaymentStatus(state.depositCode).then(ok => {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    if (ok) {
+      // Refresh user balance
+      return API.call('me').then(j => {
+        if (j && j.ok && j.user) {
+          state.user = j.user;
+          syncHeader();
+          document.getElementById('balNow').textContent = money(state.user.balance);
+          document.getElementById('balCur').textContent = money(state.user.balance);
+        }
+        closeModal('balanceOverlay');
+        openAccount('deposits');
+        toast('Payment verified & balance updated', 'ok');
+      });
+    } else {
+      toast('Payment still pending. Try again later.', 'err');
+    }
+  });
+}
+/* ---------- auto-payment polling ---------- */
+let paymentPollTimer;
+function checkPaymentStatus(code) {
+  return API.call('payment_status', { code }).then(j => {
+    if (!j.ok) return false;
+    const d = j;
+    if (d.status === 'approved') {
+      // Auto-credit balance
+      if (state.user) {
+        state.user.balance = (Number(state.user.balance) || 0) + Number(d.amount || 0);
+        syncHeader();
+      }
+      document.getElementById('depStatus').textContent = 'Approved';
+      document.getElementById('depStatus').className = 'badge badge-ok';
+      document.getElementById('depDoneTrx').textContent = d.trx || '—';
+      clearInterval(paymentPollTimer);
+      paymentPollTimer = null;
+      toast('Payment verified · Balance credited', 'ok');
+      return true;
+    }
+    if (d.status === 'failed') {
+      document.getElementById('depStatus').textContent = 'Failed';
+      document.getElementById('depStatus').className = 'badge-pending';
+      clearInterval(paymentPollTimer);
+      paymentPollTimer = null;
+      return false;
+    }
+    return false; // still pending
+  }).catch(() => false);
+}
+
+function startPollingPayment(code) {
+  if (paymentPollTimer) clearInterval(paymentPollTimer);
+  checkPaymentStatus(code);
+  paymentPollTimer = setInterval(() => checkPaymentStatus(code), 3000);
+  // Auto-stop after 5 minutes
+  setTimeout(() => { if (paymentPollTimer) { clearInterval(paymentPollTimer); paymentPollTimer = null; } }, 300000);
+}
+
 function submitDeposit() {
   if (!state.user) { closeModal('balanceOverlay'); openAccount(); return; }
   const trx = document.getElementById('depTrx').value.trim();
@@ -1341,6 +1408,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   syncHeader();
   syncSignOut();
   if (BOOT.reset || BOOT.reset_err) applyResetBoot();
+
+  // Auto-payment polling: check if user returned from RupantorPay with a deposit code
+  try {
+    const u = new URL(location.href);
+    const depCode = u.searchParams.get('deposit');
+    const depStatus = u.searchParams.get('status');
+    if (depCode) {
+      // Clean URL
+      u.searchParams.delete('deposit');
+      u.searchParams.delete('status');
+      u.searchParams.delete('code');
+      history.replaceState(null, '', u.pathname + u.search);
+      // Start polling payment status
+      if (depCode) {
+        startPollingPayment(depCode);
+        toast('Payment being verified...', 'ok');
+      }
+    }
+  } catch (e) {}
 
   const hideAnnounce = () => { document.getElementById('announceBar').classList.remove('show'); store.set('sxc_announce', 'ok'); };
   if (store.get('sxc_announce', '') !== 'ok') {

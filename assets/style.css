@@ -534,3 +534,8 @@ a{color:inherit;text-decoration:none}
 /* WHY SECTION DEMO VIDEO */
 .why-video{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);margin:16px 0 20px;background:#000}
 .why-video iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+
+/* Balance check button */
+.btn-check{background:var(--primary);color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:14px}
+.btn-check:hover{background:var(--primary-dark)}
+.btn-check:disabled{background:var(--hover-bg);color:var(--text2);cursor:not-allowed}
